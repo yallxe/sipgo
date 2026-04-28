@@ -10,10 +10,11 @@ import (
 type UserAgent struct {
 	name        string
 	hostname    string
-	ip          net.IP
 	dnsResolver *net.Resolver
 	tlsConfig   *tls.Config
 	parser      *sip.Parser
+	txOptions   []sip.TransactionLayerOption
+	tpOptions   []sip.TransportLayerOption
 	tp          *sip.TransportLayer
 	tx          *sip.TransactionLayer
 }
@@ -63,13 +64,29 @@ func WithUserAgentParser(p *sip.Parser) UserAgentOption {
 	}
 }
 
+// WithUserAgentTransactionLayerOptions allows setting options for the transaction layer
+func WithUserAgentTransactionLayerOptions(o ...sip.TransactionLayerOption) UserAgentOption {
+	return func(s *UserAgent) error {
+		s.txOptions = o
+		return nil
+	}
+}
+
+// WithUserAgentTransportLayerOptions allows setting options for the transport layer
+func WithUserAgentTransportLayerOptions(o ...sip.TransportLayerOption) UserAgentOption {
+	return func(s *UserAgent) error {
+		s.tpOptions = o
+		return nil
+	}
+}
+
 // NewUA creates User Agent
 // User Agent will create transport and transaction layer
 // Check options for customizing user agent
 func NewUA(options ...UserAgentOption) (*UserAgent, error) {
 	ua := &UserAgent{
-		name: "sipgo",
-		// hostname:    "localhost",
+		name:        "sipgo",
+		hostname:    "localhost",
 		dnsResolver: net.DefaultResolver,
 		parser:      sip.NewParser(),
 	}
@@ -80,18 +97,8 @@ func NewUA(options ...UserAgentOption) (*UserAgent, error) {
 		}
 	}
 
-	if ua.ip == nil {
-		v, err := sip.ResolveSelfIP()
-		if err != nil {
-			return nil, err
-		}
-		if err := ua.setIP(v); err != nil {
-			return nil, err
-		}
-	}
-
-	ua.tp = sip.NewTransportLayer(ua.dnsResolver, ua.parser, ua.tlsConfig)
-	ua.tx = sip.NewTransactionLayer(ua.tp)
+	ua.tp = sip.NewTransportLayer(ua.dnsResolver, ua.parser, ua.tlsConfig, ua.tpOptions...)
+	ua.tx = sip.NewTransactionLayer(ua.tp, ua.txOptions...)
 	return ua, nil
 }
 
@@ -103,18 +110,12 @@ func (ua *UserAgent) Close() error {
 	return ua.tp.Close()
 }
 
-// Listen adds listener for serve
-func (ua *UserAgent) setIP(ip net.IP) (err error) {
-	ua.ip = ip
-	return err
-}
-
-func (ua *UserAgent) GetIP() net.IP {
-	return ua.ip
-}
-
 func (ua *UserAgent) Name() string {
 	return ua.name
+}
+
+func (ua *UserAgent) Hostname() string {
+	return ua.hostname
 }
 
 func (ua *UserAgent) TransportLayer() *sip.TransportLayer {

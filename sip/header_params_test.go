@@ -8,7 +8,7 @@ import (
 )
 
 func TestSepToString(t *testing.T) {
-	hp := NewParams()
+	var hp HeaderParams
 	hp.Add("tag", "aaa")
 	hp.Add("branch", "bbb")
 
@@ -21,11 +21,11 @@ func TestSepToString(t *testing.T) {
 
 func BenchmarkHeaderParams(b *testing.B) {
 
-	testParams := func(b *testing.B, hp Params) {
-		hp = hp.Add("branch", "assadkjkgeijdas")
-		hp = hp.Add("received", "127.0.0.1")
-		hp = hp.Add("toremove", "removeme")
-		hp = hp.Remove("toremove")
+	testParams := func(b *testing.B, hp HeaderParams) {
+		hp.Add("branch", "assadkjkgeijdas")
+		hp.Add("received", "127.0.0.1")
+		hp.Add("toremove", "removeme")
+		hp.Remove("toremove")
 
 		if _, exists := hp.Get("received"); !exists {
 			b.Fatal("received does not exists")
@@ -36,18 +36,10 @@ func BenchmarkHeaderParams(b *testing.B) {
 			b.Fatal("Params empty")
 		}
 
-		if s != "branch=assadkjkgeijdas;received=127.0.0.1" && s != "received=127.0.0.1;branch=assadkjkgeijdas" {
+		if s != "branch=assadkjkgeijdas;received=127.0.0.1" {
 			b.Fatal("Bad parsing")
 		}
 	}
-
-	// Lot of allocations makes slower parsing
-	// b.Run("GOSIP", func(b *testing.B) {
-	// 	for i := 0; i < b.N; i++ {
-	// 		hp := NewParams()
-	// 		testParams(b, hp.(Params))
-	// 	}
-	// })
 
 	// Our version must be faster than GOSIP
 	b.Run("MAP", func(b *testing.B) {
@@ -82,9 +74,6 @@ func BenchmarkStringConcetationVsBuffer(b *testing.B) {
 			buf.WriteString(name)
 			buf.WriteString(":")
 			buf.WriteString(value)
-			// if buf.String() != expected {
-			// 	b.FailNow()
-			// }
 		}
 		if buf.Len() == 0 {
 			b.FailNow()

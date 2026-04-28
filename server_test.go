@@ -3,18 +3,18 @@ package sipgo
 import (
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/emiago/sipgo/fakes"
-	"github.com/emiago/sipgo/sip"
-	"github.com/rs/zerolog"
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/emiago/sipgo/fakes"
+	"github.com/emiago/sipgo/sip"
 )
 
 func testCreateMessage(t testing.TB, rawMsg []string) sip.Message {
@@ -27,8 +27,8 @@ func testCreateMessage(t testing.TB, rawMsg []string) sip.Message {
 
 func createSimpleRequest(method sip.RequestMethod, sender sip.Uri, recipment sip.Uri, transport string) *sip.Request {
 	req := sip.NewRequest(method, recipment)
-	params := sip.NewParams()
-	params["branch"] = sip.GenerateBranch()
+	var params sip.HeaderParams
+	params.Add("branch", sip.GenerateBranch())
 	req.AppendHeader(&sip.ViaHeader{
 		ProtocolName:    "SIP",
 		ProtocolVersion: "2.0",
@@ -40,22 +40,18 @@ func createSimpleRequest(method sip.RequestMethod, sender sip.Uri, recipment sip
 	req.AppendHeader(&sip.FromHeader{
 		DisplayName: strings.ToUpper(sender.User),
 		Address: sip.Uri{
-			User:      sender.User,
-			Host:      sender.Host,
-			Port:      sender.Port,
-			UriParams: sip.NewParams(),
+			User: sender.User,
+			Host: sender.Host,
+			Port: sender.Port,
 		},
-		Params: sip.NewParams(),
 	})
 	req.AppendHeader(&sip.ToHeader{
 		DisplayName: strings.ToUpper(recipment.User),
 		Address: sip.Uri{
-			User:      recipment.User,
-			Host:      recipment.Host,
-			Port:      recipment.Port,
-			UriParams: sip.NewParams(),
+			User: recipment.User,
+			Host: recipment.Host,
+			Port: recipment.Port,
 		},
-		Params: sip.NewParams(),
 	})
 	callid := sip.CallIDHeader("gotest-" + time.Now().Format(time.RFC3339Nano))
 	req.AppendHeader(&callid)
@@ -74,7 +70,7 @@ func createTestInvite(t testing.TB, targetSipUri string, transport, addr string)
 		"From: \"Alice\" <sip:alice@" + addr + ">;tag=" + ftag,
 		"To: \"Bob\" <" + targetSipUri + ">",
 		"Call-ID: " + callid,
-		"CSeq: 1 INVITE",
+		"CSeq: 10 INVITE",
 		"Content-Length: 0",
 		"",
 		"",
@@ -89,7 +85,7 @@ func createTestBye(t testing.TB, targetSipUri string, transport, addr string, ca
 		"From: \"Alice\" <sip:alice@" + addr + ">;tag=" + ftag,
 		"To: \"Bob\" <" + targetSipUri + ">;tag=" + totag,
 		"Call-ID: " + callid,
-		"CSeq: 1 INVITE",
+		"CSeq: 10 INVITE",
 		"Content-Length: 0",
 		"",
 		"",
@@ -97,21 +93,31 @@ func createTestBye(t testing.TB, targetSipUri string, transport, addr string, ca
 }
 
 func TestMain(m *testing.M) {
-	log.Logger = zerolog.New(zerolog.ConsoleWriter{
-		Out:        os.Stdout,
-		TimeFormat: "2006-01-02 15:04:05.000",
-	}).With().Timestamp().Logger().Level(zerolog.WarnLevel)
+	// log.Logger = zerolog.New(zerolog.ConsoleWriter{
+	// 	Out:        os.Stdout,
+	// 	TimeFormat: "2006-01-02 15:04:05.000",
+	// }).With().Timestamp().Logger().Level(zerolog.WarnLevel)
 
-	if lvl, err := zerolog.ParseLevel(os.Getenv("LOG_LEVEL")); err == nil {
-		log.Logger = log.Level(lvl)
-	}
+	// if lvl, err := zerolog.ParseLevel(os.Getenv("LOG_LEVEL")); err == nil {
+	// 	log.Logger = log.Level(lvl)
+	// }
 	sip.SIPDebug = os.Getenv("SIP_DEBUG") == "true"
+	sip.TransactionFSMDebug = os.Getenv("TRANSACTION_DEBUG") == "true"
+
+	var lvl slog.Level
+	if err := lvl.UnmarshalText([]byte(os.Getenv("LOG_LEVEL"))); err != nil {
+		lvl = slog.LevelInfo
+	}
+	slog.SetLogLoggerLevel(lvl)
 
 	m.Run()
 }
 
 func TestUDPUAS(t *testing.T) {
-	// Detect any goleaks
+	// Set this timer so that we avoid long retransmissions
+	sip.Timer_J = 10 * time.Millisecond
+	sip.Timer_L = 10 * time.Millisecond
+
 	ua, err := NewUA()
 	require.Nil(t, err)
 
@@ -397,7 +403,7 @@ func ExampleServer_OnNoRoute() {
 		res := sip.NewResponseFromRequest(req, 405, "Method Not Allowed", nil)
 		// Send response directly and let transaction terminate
 		if err := srv.WriteResponse(res); err != nil {
-			srv.log.Error().Err(err).Msg("respond '405 Method Not Allowed' failed")
+			srv.log.Error("respond '405 Method Not Allowed' failed", "error", err)
 		}
 	})
 }

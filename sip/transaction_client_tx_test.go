@@ -3,19 +3,21 @@ package sip
 import (
 	"bytes"
 	"io"
+	"log/slog"
+	"net"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/emiago/sipgo/fakes"
-	"github.com/rs/zerolog/log"
 	"github.com/stretchr/testify/require"
 )
 
 func TestClientTransactionInviteFSM(t *testing.T) {
 	// make things fast
 	SetTimers(1*time.Millisecond, 1*time.Millisecond, 1*time.Millisecond)
-	req, _, _ := testCreateInvite(t, "127.0.0.99:5060", "udp", "127.0.0.2:5060")
+	req, _, _ := testCreateInvite(t, "sip:127.0.0.99:5060", "udp", "127.0.0.2:5060")
+	req.raddr = Addr{IP: net.ParseIP("127.0.0.99"), Port: 5060}
 
 	incoming := bytes.NewBuffer([]byte{})
 	outgoing := bytes.NewBuffer([]byte{})
@@ -25,9 +27,8 @@ func TestClientTransactionInviteFSM(t *testing.T) {
 			Writers: map[string]io.Writer{"127.0.0.99:5060": outgoing},
 		},
 	}
-	tx := NewClientTx("123", req, conn, log.Logger)
+	tx := NewClientTx("123", req, conn, slog.Default())
 
-	// CALLING STATE
 	err := tx.Init()
 	require.NoError(t, err)
 	require.NoError(t, compareFunctions(tx.currentFsmState(), tx.inviteStateCalling))
@@ -59,7 +60,7 @@ func TestClientTransactionInviteFSM(t *testing.T) {
 
 func TestClientTransactionFSM(t *testing.T) {
 	// SetTimers(1*time.Millisecond, 1*time.Millisecond, 1*time.Millisecond)
-	req, _, _ := testCreateInvite(t, "127.0.0.99:5060", "udp", "127.0.0.2:5060")
+	req, _, _ := testCreateInvite(t, "sip:127.0.0.99:5060", "udp", "127.0.0.2:5060")
 
 	incoming := bytes.NewBuffer([]byte{})
 	outgoing := bytes.NewBuffer([]byte{})
@@ -71,7 +72,7 @@ func TestClientTransactionFSM(t *testing.T) {
 				Writers: map[string]io.Writer{"127.0.0.99:5060": outgoing},
 			},
 		}
-		tx := NewClientTx("123", req, conn, log.Logger)
+		tx := NewClientTx("123", req, conn, slog.Default())
 		err := tx.Init()
 		require.NoError(t, err)
 
@@ -98,7 +99,7 @@ func TestClientTransactionFSM(t *testing.T) {
 				Writers: map[string]io.Writer{"127.0.0.99:5060": outgoing},
 			},
 		}
-		tx := NewClientTx("123", req, conn, log.Logger)
+		tx := NewClientTx("123", req, conn, slog.Default())
 		err := tx.Init()
 		require.NoError(t, err)
 
